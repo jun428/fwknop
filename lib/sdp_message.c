@@ -23,6 +23,7 @@ const char *sdp_action_authenticate_request	  = "authenticate_request";
 const char *sdp_action_stanza_update_request  = "stanza_update_request";
 const char *sdp_action_stanza_update		  = "stanza_update";
 const char *sdp_action_stanza_ack			  = "stanza_update_ack";
+const char *root_check			              = "/root";
 /*end*/
 
 const char *sdp_action_credentials_good       = "credentials_good";
@@ -417,6 +418,42 @@ error:
     return rv;
 }
 
+//homeSDP need to mod
+int sdp_write_stanza_to_fwknoprc(sdp_stanzas_t stanzas) 
+{
+
+    char *HOME;
+    FILE *fp;
+    char path[50];
+ 
+    HOME = getenv("HOME");
+    if(strncmp(HOME, root_check,  strlen(root_check)) == 0){
+        strncat(path, HOME,strlen(HOME));
+        strncat(path, "/gate.fwknoprc",strlen("/gate.fwknoprc"));
+	    fp = fopen(path, "a");
+    }
+    else{
+        strncat(path, HOME,strlen(HOME));
+        strncat(path, "/gate.fwknoprc",strlen("/.fwknoprc"));
+	    fp = fopen(path, "a");
+    }
+	
+	fprintf(fp, "\n[%s]\n",stanzas->stanza_name);
+	fprintf(fp, "SDP_ID\t%d\n",stanzas->sdp_id);
+	fprintf(fp, "ALLOW_IP\t%s\n",stanzas->allow_ip);
+	fprintf(fp, "SERVICE_IDS\t%d\n",stanzas->service_ids);
+	fprintf(fp, "SPA_SERVER\t%s\n",stanzas->spa_server);
+	fprintf(fp, "KEY_BASE64\t%s\n",stanzas->key_base64);
+	fprintf(fp, "HMAC_KEY_BASE64\t%s\n",stanzas->hmac_key_base64);
+	fprintf(fp, "USE_HMAC\t%s\n",stanzas->use_hmac);
+	fprintf(fp, "SDP_CTRL_CLIENT_CONF\t%s\n",stanzas->sdp_ctrl_client_conf);
+
+	fclose(fp);
+
+	int rv = SDP_SUCCESS;
+
+	return rv;
+}
 
 int sdp_message_parse_cred_fields(json_object *jdata, void **r_creds)
 {
@@ -457,6 +494,47 @@ int sdp_message_parse_cred_fields(json_object *jdata, void **r_creds)
 error:
     sdp_message_destroy_creds(creds);
     return rv;
+}
+
+//homeSDP
+void sdp_message_destroy_stanzas(sdp_stanzas_t stanzas)
+{
+
+
+    if(stanzas == NULL)
+        return;
+
+    if(stanzas->stanza_name != NULL)
+        free(stanzas->stanza_name);
+
+    if(stanzas->sdp_id != 0)
+		stanzas->sdp_id = 0;
+
+    if(stanzas->allow_ip != NULL)
+        free(stanzas->allow_ip);
+
+	if(stanzas->service_ids != 0)
+        stanzas->service_ids = 0;
+
+    if(stanzas->spa_server != NULL)
+        free(stanzas->spa_server);
+
+    if(stanzas->key_base64 != NULL)
+        free(stanzas->key_base64);
+
+    if(stanzas->hmac_key_base64 != NULL)
+        free(stanzas->hmac_key_base64);
+
+    if(stanzas->use_hmac != NULL)
+        free(stanzas->use_hmac);
+
+    if(stanzas->sdp_ctrl_client_conf != NULL)
+        free(stanzas->sdp_ctrl_client_conf);
+
+    free(stanzas);
+
+	//printf("[myDebug] after\n");
+
 }
 
 void sdp_message_destroy_creds(sdp_creds_t creds)
