@@ -82,3 +82,5 @@ android/project/jni/libfwknop/*.c
 /client/fwknop
 /client/fwknop.8
 /common/.deps
+
+certs

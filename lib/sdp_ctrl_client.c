@@ -1602,6 +1602,13 @@ int sdp_ctrl_client_loop(sdp_ctrl_client_t client)
     int action = INVALID_CTRL_ACTION;
     void *data = NULL;
 
+    //homeSDP
+	int cred_updated = 0;
+	int stanza_updated = 0;
+	int connected = 0;
+
+    if(action == CTRL_ACTION_STANZA_UPDATE)
+			stanza_updated = 1;
     if(client == NULL || !client->initialized)
         return SDP_ERROR_UNINITIALIZED;
 
@@ -1623,31 +1630,55 @@ int sdp_ctrl_client_loop(sdp_ctrl_client_t client)
         // check for incoming messages
         if((rv = sdp_ctrl_client_check_inbox(client, &action, &data)) != SDP_SUCCESS)
             break;
+        
+        //homeSDP
+		if(action == CTRL_ACTION_CREDENTIAL_UPDATE)
+			cred_updated = 1;
+		else if(action == CTRL_ACTION_STANZA_UPDATE)
+			stanza_updated = 1;
+
+		if(cred_updated || stanza_updated)
+			connected = 1;
 
         // do not begin sending requests until controller is ready
         if( !(client->controller_ready) )
             continue;
 
-        //homeSDP
-		if((rv = sdp_ctrl_client_consider_stanza_update(client)) != SDP_SUCCESS ) {
-				break;
-		}
-
+		
         // if new connection or just time, update credentials
+		
         if((rv = sdp_ctrl_client_consider_cred_update(client)) != SDP_SUCCESS)
             break;
 
+		/*homeSDP*/
+		if(!stanza_updated) {
+			if((rv = sdp_ctrl_client_consider_stanza_update(client)) != SDP_SUCCESS ) {
+				break;
+			}
+		}
+
         // if configured to disconnect after update, do so
-        if(!client->remain_connected && client->last_cred_update > 0)
-            break;
+		if(cred_updated) {
+        	if(!client->remain_connected && client->last_cred_update > 0)
+            	break;
+		}
 
         // handle any signals that may have come in
-        if((rv = sdp_ctrl_client_handle_signals(client)) != SDP_SUCCESS)
+		if(cred_updated) {
+			//printf("[myDebug] Call sdp_ctrl_client_handle_signals\n");
+        	if((rv = sdp_ctrl_client_handle_signals(client)) != SDP_SUCCESS)
             break;
+		}
 
         // is a keep alive due
-        if((rv = sdp_ctrl_client_consider_keep_alive(client)) != SDP_SUCCESS)
+		if(cred_updated) {
+			//printf("[myDebug] Call sdp_ctrl_client_consider_keep_alive\n");
+ 	       	if((rv = sdp_ctrl_client_consider_keep_alive(client)) != SDP_SUCCESS)
             break;
+		}
+
+		if(connected)
+			break;
 
         sleep(1);
     }
