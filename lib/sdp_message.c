@@ -339,6 +339,9 @@ int sdp_message_parse_stanza_fields(json_object *jmsg, void **r_stanzas)
 	int index;
 	int i;
 
+    //homeSDP
+    char path[100];
+
 	if(jmsg == NULL)
 	{
 		log_msg(LOG_ERR, "Trying to parse stanza fields, but jdata is NULL");
@@ -396,6 +399,10 @@ int sdp_message_parse_stanza_fields(json_object *jmsg, void **r_stanzas)
 			goto error;
     	}
 
+        //homeSDP
+        if(sdp_get_HOME_path(path,2)!=2){
+        printf("HOME PATH ERROR\n");
+        }
 		// sdp_ctrl_client_conf is set by default
 		if((stanzas->sdp_ctrl_client_conf = strndup("/home/initiatinghost/sdp_ctrl_client.conf", SDP_MSG_FIELD_MAX_LEN)) == NULL)
     	{
@@ -418,25 +425,54 @@ error:
     return rv;
 }
 
+//homeSDP path
+int sdp_get_HOME_path(char * _path,int option){    
+    char *HOME;
+    char path[100];
+ 
+    HOME = getenv("HOME");
+    
+    if(option == 1){
+
+        if(strncmp(HOME, root_check,  strlen(root_check)) == 0){
+            strncat(path, "/etc/fwknop/gate.fwknoprc",strlen("/etc/fwknop/gate.fwknoprc"));
+        }
+        else{
+        strncat(path, HOME,strlen(HOME));
+        strncat(path, "/.fwknoprc",strlen("/.fwknoprc"));
+        }
+        strncpy(_path, path,  strlen(path));
+        printf("%s\n",_path);
+        return 1;
+
+    }
+    else if(option == 2){
+
+        if(strncmp(HOME, root_check,  strlen(root_check)) == 0){
+            strncat(path, "/etc/fwknop/gate_sdp_ctrl_client.conf",strlen("/etc/fwknop/gate_sdp_ctrl_client.conf"));
+        }
+        else{
+        strncat(path, HOME,strlen(HOME));
+        strncat(path, "/SAMPLE_sdp_ctrl_client.conf",strlen("/SAMPLE_sdp_ctrl_client.conf"));
+        }
+        strncpy(_path, path,  strlen(path));
+        printf("%s\n",_path);
+        return 2;
+    }
+    return -1;
+}
+
 //homeSDP need to mod
 int sdp_write_stanza_to_fwknoprc(sdp_stanzas_t stanzas) 
 {
 
-    char *HOME;
     FILE *fp;
-    char path[50];
- 
-    HOME = getenv("HOME");
-    if(strncmp(HOME, root_check,  strlen(root_check)) == 0){
-        strncat(path, HOME,strlen(HOME));
-        strncat(path, "/gate.fwknoprc",strlen("/gate.fwknoprc"));
-	    fp = fopen(path, "a");
+    char path[100];
+    if(sdp_get_HOME_path(path,1)!=1){
+        printf("HOME PATH ERROR\n");
     }
-    else{
-        strncat(path, HOME,strlen(HOME));
-        strncat(path, "/gate.fwknoprc",strlen("/.fwknoprc"));
-	    fp = fopen(path, "a");
-    }
+
+    fp = fopen(path,"a");
 	
 	fprintf(fp, "\n[%s]\n",stanzas->stanza_name);
 	fprintf(fp, "SDP_ID\t%d\n",stanzas->sdp_id);

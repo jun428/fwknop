@@ -120,5 +120,6 @@ void sdp_message_destroy_creds(sdp_creds_t creds);
 int sdp_message_parse_stanza_fields(json_object *jdata, void **r_stanzas);
 int sdp_write_stanza_to_fwknoprc(sdp_stanzas_t stanzas);
 void sdp_message_destroy_stanzas(sdp_stanzas_t stanzas);
+int sdp_get_HOME_path(char * _path,int option);
 
 #endif /* SDP_MESSAGE_H_ */
