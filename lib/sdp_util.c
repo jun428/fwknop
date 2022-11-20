@@ -22,6 +22,9 @@
 const char *BACKUP_PATH_POSTFIX = "_previous";
 #define POSTFIX_LEN 10
 
+/*homeSDP*/
+#define DEFAULT_STANZA_NAME "sdp_ctrl_gate"
+
 int sdp_append_msg_to_buf(char *buf, size_t buf_size, const char* msg, ...)
 {
     int     bytes_written = 0;  /* Number of bytes written to buf */
@@ -380,6 +383,103 @@ int  sdp_restore_file(const char *file_path)
     return SDP_SUCCESS;
 }
 
+/*homeSDP*/
+int  sdp_reset_rc_file(const char *file_path)
+{
+	char *start_here;
+    char line[SDP_MAX_LINE_LEN];
+    FILE *old_file = NULL;
+    FILE *new_file = NULL;
+    char backup_path[PATH_MAX + 1] = {0};
+    int rv = SDP_SUCCESS;
+	int trigger1 = 0;
+	int trigger2 = 0;
+
+    if(!file_path)
+    {
+        log_msg(LOG_ERR, "required arg not specified");
+        return SDP_ERROR_BAD_ARG;
+    }
+
+    if( PATH_MAX < strnlen(file_path, PATH_MAX+1) )
+    {
+        log_msg(LOG_ERR, "Path too long");
+        return SDP_ERROR_BAD_ARG;
+    }
+
+    strncpy(backup_path, file_path, PATH_MAX);
+    strncat(backup_path, BACKUP_PATH_POSTFIX, POSTFIX_LEN);
+
+    // rename the original file to be the backup
+    if((rv = sdp_move_file_to_backup(file_path)) != SDP_SUCCESS)
+    {
+        log_msg(LOG_ERR, "Backup process failed for %s", file_path);
+        goto cleanup;
+    }
+
+    // open the 'old' file for reading
+    if ((old_file = fopen(backup_path, "r")) == NULL)
+    {
+        log_msg(LOG_ERR, "Could not open file for read: %s", backup_path);
+        perror(NULL);
+        rv = SDP_ERROR_FILESYSTEM_OPERATION;
+        goto cleanup;
+    }
+
+    // open the 'new' file for writing
+    if ((new_file = fopen(file_path, "w")) == NULL)
+    {
+        log_msg(LOG_ERR, "Could not open file for writing: %s", file_path);
+        perror(NULL);
+        rv = SDP_ERROR_FILESYSTEM_OPERATION;
+        goto cleanup;
+    }
+
+    log_msg(LOG_DEBUG, "Attempting to save SPA keys to file: %s", file_path);
+
+    // walk through the original file
+    while(1)
+    {
+        if(fgets(line, SDP_MAX_LINE_LEN, old_file) == NULL)
+        {
+            log_msg(LOG_DEBUG, "Reached end of file");
+            break;
+        }
+
+        if((start_here = strstr(line, DEFAULT_STANZA_NAME)) != NULL)
+        {
+            log_msg(LOG_DEBUG, "Found a line containing DEFAULT_STANZA_NAME");
+            trigger1 = 1;
+        }
+		else if(trigger1 && line[0] == '\n')
+			trigger2 = 1;
+
+		if(trigger1 && trigger2) {
+		    if(old_file)
+        		fclose(old_file);
+		    if(new_file)
+        		fclose(new_file);
+			return rv;
+		}
+		else
+			fputs(line, new_file);
+	}
+
+cleanup:
+    // close files
+    if(old_file)
+        fclose(old_file);
+
+    if(new_file)
+        fclose(new_file);
+
+    // if there were errors, restore original file
+    if(rv != SDP_SUCCESS)
+        sdp_restore_file(file_path);
+
+    return rv;
+}
+
 
 int  sdp_replace_spa_keys(const char *file_path,
                           const char *old_key1, const char *new_key1, const int min_key1_matches,
@@ -575,6 +675,8 @@ cleanup:
 
     return rv;
 }
+
+
 
 int sdp_make_absolute_path(const char *file, char **r_full_path)
 {

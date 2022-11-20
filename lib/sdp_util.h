@@ -26,6 +26,9 @@ int  sdp_replace_spa_keys(const char *file_path,
 					      const char *old_key1, const char *new_key1, const int min_key1_matches,
 						  const char *old_key2, const char *new_key2, const int min_key2_matches);
 int  sdp_make_absolute_path(const char *file, char **r_full_path);
+
+/*homeSDP*/
+int sdp_reset_rc_file(const char *file_path);
 #endif /* SDP_UTIL_H */
 
 /***EOF***/

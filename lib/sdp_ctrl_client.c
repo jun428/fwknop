@@ -645,6 +645,31 @@ int sdp_ctrl_client_check_inbox(sdp_ctrl_client_t client, int *r_action, void **
                 }
                 break;
 
+            /*homeSDP */
+			case CTRL_ACTION_STANZA_UPDATE:
+				log_msg(LOG_NOTICE, "Stanza update received");
+                client->controller_ready = 1;
+				*r_action = action;
+
+             	if(client->client_state == SDP_CTRL_CLIENT_STATE_STANZA_REQUESTING || client->client_state == SDP_CTRL_CLIENT_STATE_STANZA_UNFULFILLED)
+                sdp_ctrl_client_clear_state_vars(client);
+
+			    // Make the 'Fulfilled' response message
+    			if((rv = sdp_message_make(sdp_action_stanza_ack, NULL, &msg)) != SDP_SUCCESS)
+    			{
+        			log_msg(LOG_ERR, "Failed to make stanza request 'ACK' message.");
+        			goto cleanup;
+    			}
+
+    			if((rv = sdp_com_send_msg(client->com, msg)) != SDP_SUCCESS)
+    			{
+        			log_msg(LOG_ERR, "Failed to send stanza request 'ACK' message.");
+        			goto cleanup;
+    			}
+
+				goto cleanup;
+            /*end*/
+
             case CTRL_ACTION_SERVICE_REFRESH:
                 log_msg(LOG_NOTICE, "Service data refresh received");
                 client->last_service_refresh = time(NULL);
@@ -1506,6 +1531,71 @@ int sdp_ctrl_client_verify_file_perms(const char *file)
 }
 
 
+/*homeSDP*/
+int sdp_ctrl_client_request_stanza_update(sdp_ctrl_client_t client) {
+	int rv = SDP_ERROR_STANZA_REQ;
+	char *msg = NULL;
+
+	if(client == NULL || !client->initialized)
+		return SDP_ERROR_UNINITIALIZED;
+
+	if(client->com->conn_state == SDP_COM_DISCONNECTED)
+		return SDP_ERROR_CONN_DOWN;
+
+	if(client->client_state != SDP_CTRL_CLIENT_STATE_READY && client->client_state != SDP_CTRL_CLIENT_STATE_STANZA_UNFULFILLED &&  client->client_state != SDP_CTRL_CLIENT_STATE_STANZA_REQUESTING ){
+		log_msg(LOG_DEBUG, "Control Client not in proper state to request stanza update");
+		return SDP_ERROR_STATE;
+	}
+
+	if((rv = sdp_message_make(sdp_action_stanza_update_request, NULL, &msg)) != SDP_SUCCESS) {
+		log_msg(LOG_ERR, "Failed to make stanza update request message.");
+		goto cleanup;
+	}
+
+	if((rv = sdp_com_send_msg(client->com, msg)) != SDP_SUCCESS){
+		log_msg(LOG_ERR, "Failed to send stanza update request message.");
+		goto cleanup;
+	}
+
+	sdp_ctrl_client_set_request_vars(client, SDP_CTRL_CLIENT_STATE_STANZA_REQUESTING);
+
+cleanup:
+	log_msg(LOG_DEBUG, "Freeing memory before exiting function");
+
+	free(msg);
+	return rv;
+}
+
+int sdp_ctrl_client_consider_stanza_update(sdp_ctrl_client_t client) {
+	int rv = SDP_SUCCESS;
+
+	if(client == NULL || !client->initialized)
+		return SDP_ERROR_UNINITIALIZED;
+
+	if(client->com->conn_state == SDP_COM_DISCONNECTED)
+		return SDP_SUCCESS;
+
+	if(client->client_state == SDP_CTRL_CLIENT_STATE_READY) {
+		rv = sdp_ctrl_client_request_stanza_update(client);
+	}
+	else if(client->client_state == SDP_CTRL_CLIENT_STATE_STANZA_REQUESTING || client->client_state == SDP_CTRL_CLIENT_STATE_STANZA_UNFULFILLED) {
+		rv = sdp_ctrl_client_request_stanza_update(client);
+	}
+	else {
+		return SDP_SUCCESS;
+	}
+	if(rv == SDP_ERROR_SOCKET_WRITE) {
+		sdp_com_disconnect(client->com);
+	}
+
+	if(rv != SDP_ERROR_MEMORY_ALLOCATION){
+		return SDP_SUCCESS;
+	}
+
+	return rv;
+}
+
+
 int sdp_ctrl_client_loop(sdp_ctrl_client_t client)
 {
     int rv = SDP_ERROR;
@@ -1537,6 +1627,11 @@ int sdp_ctrl_client_loop(sdp_ctrl_client_t client)
         // do not begin sending requests until controller is ready
         if( !(client->controller_ready) )
             continue;
+
+        //homeSDP
+		if((rv = sdp_ctrl_client_consider_stanza_update(client)) != SDP_SUCCESS ) {
+				break;
+		}
 
         // if new connection or just time, update credentials
         if((rv = sdp_ctrl_client_consider_cred_update(client)) != SDP_SUCCESS)

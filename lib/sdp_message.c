@@ -18,6 +18,13 @@ const char *sdp_key_action                    = "action";
 const char *sdp_key_stage                     = "stage";
 const char *sdp_key_data                      = "data";
 
+/*homeSDP*/
+const char *sdp_action_authenticate_request	  = "authenticate_request";
+const char *sdp_action_stanza_update_request  = "stanza_update_request";
+const char *sdp_action_stanza_update		  = "stanza_update";
+const char *sdp_action_stanza_ack			  = "stanza_update_ack";
+/*end*/
+
 const char *sdp_action_credentials_good       = "credentials_good";
 const char *sdp_action_keep_alive             = "keep_alive";
 const char *sdp_action_cred_update            = "credential_update";
@@ -168,6 +175,10 @@ static int sdp_get_message_action(json_object *jmsg, ctrl_action_t *r_action)
     else if(strncmp(action_str, sdp_action_bad_message, strlen(sdp_action_bad_message)) == 0)
         action = CTRL_ACTION_BAD_MESSAGE;
 
+	/*homeSDP*/
+	else if(strncmp(action_str, sdp_action_stanza_update, strlen(sdp_action_stanza_update)) == 0)
+        action = CTRL_ACTION_STANZA_UPDATE;
+
     free(action_str);
 
     if(action == INVALID_CTRL_ACTION)
@@ -242,6 +253,19 @@ int sdp_message_process(const char *msg, ctrl_action_t *r_action, void **r_data)
         goto cleanup;
     }
 
+
+	if(action == CTRL_ACTION_STANZA_UPDATE)
+    {
+        log_msg(LOG_WARNING, "Received stanza update message");
+
+        if((rv = sdp_message_parse_stanza_fields(jmsg, r_data)) != SDP_SUCCESS)
+        {
+            log_msg(LOG_ERR, "Failed to parse new stanza data");
+        }
+		
+		goto cleanup;
+    }
+
     // if data field is missing, flunk out
     if( !json_object_object_get_ex(jmsg, sdp_key_data, &jdata))
     {
@@ -302,6 +326,94 @@ cleanup:
         rv = SDP_SUCCESS;
     }
 
+    return rv;
+}
+
+/*homeSDP*/
+int sdp_message_parse_stanza_fields(json_object *jmsg, void **r_stanzas)
+{
+	sdp_stanzas_t stanzas = NULL;
+	json_object *arrayJobj, *indexJobj;
+	int rv = SDP_ERROR_INVALID_MSG;
+	int index;
+	int i;
+
+	if(jmsg == NULL)
+	{
+		log_msg(LOG_ERR, "Trying to parse stanza fields, but jdata is NULL");
+		return rv;
+	}
+
+	
+	//printf("[myDebug] object type: %d\n", json_object_get_type(json_object_object_get(jmsg, "action")));
+	//printf("[myDebug] object type: %d\n", json_object_get_type(json_object_object_get(jmsg, "index")));
+
+	arrayJobj = json_object_object_get(jmsg, sdp_key_data);
+
+	//printf("[myDebug] object type: %d\n", json_object_get_type(arrayJobj));
+
+	for(i = 0; i < json_object_array_length(arrayJobj); i++)
+	{
+		indexJobj = json_object_array_get_idx(arrayJobj, i);
+
+	    // allocate memory
+	    if((stanzas = calloc(1, sizeof *stanzas)) == NULL)
+    	    return (SDP_ERROR_MEMORY_ALLOCATION);
+
+	    // extract stanza_name
+	    if((rv = sdp_get_json_string_field("STANZA_NAME", indexJobj, &(stanzas->stanza_name))) != SDP_SUCCESS)
+	       	goto error;
+	
+	    // extract sdp_id
+	    if((rv = sdp_get_json_int_field("SDP_ID", indexJobj, &(stanzas->sdp_id))) != SDP_SUCCESS)
+	        goto error;
+	
+	    // extract allow_ip
+	    if((rv = sdp_get_json_string_field("ALLOW_IP", indexJobj, &(stanzas->allow_ip))) != SDP_SUCCESS)
+	        goto error;
+	
+	    // extract service_ids
+	    if((rv = sdp_get_json_int_field("SERVICE_IDS", indexJobj, &(stanzas->service_ids))) != SDP_SUCCESS)
+	        goto error;
+
+		// extract spa_server
+	    if((rv = sdp_get_json_string_field("SPA_SERVER", indexJobj, &(stanzas->spa_server))) != SDP_SUCCESS)
+	        goto error;
+
+    	// extract key_base64
+	    if((rv = sdp_get_json_string_field("KEY_BASE64", indexJobj, &(stanzas->key_base64))) != SDP_SUCCESS)
+	        goto error;
+
+    	// extract hmac_key_base64
+	    if((rv = sdp_get_json_string_field("HMAC_KEY_BASE64", indexJobj, &(stanzas->hmac_key_base64))) != SDP_SUCCESS)
+	        goto error;
+
+		// use_hmac is set by default
+		if((stanzas->use_hmac = strndup("Y", SDP_MSG_FIELD_MAX_LEN)) == NULL)
+    	{
+        	rv = SDP_ERROR_MEMORY_ALLOCATION;
+			goto error;
+    	}
+
+		// sdp_ctrl_client_conf is set by default
+		if((stanzas->sdp_ctrl_client_conf = strndup("/home/initiatinghost/sdp_ctrl_client.conf", SDP_MSG_FIELD_MAX_LEN)) == NULL)
+    	{
+    	   	rv = SDP_ERROR_MEMORY_ALLOCATION;
+			goto error;
+    	}
+		
+		// write to .fwknoprc with this stanzas;
+		sdp_write_stanza_to_fwknoprc(stanzas);
+
+		sdp_message_destroy_stanzas(stanzas);
+	}
+
+    // if we got here, all is good
+    // provide the credentials structure
+    return SDP_SUCCESS;
+
+error:
+	sdp_message_destroy_stanzas(stanzas);
     return rv;
 }
 

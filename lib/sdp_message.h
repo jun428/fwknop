@@ -15,6 +15,10 @@ typedef enum {
     CTRL_ACTION_CREDENTIALS_GOOD,
     CTRL_ACTION_KEEP_ALIVE,
     CTRL_ACTION_CREDENTIAL_UPDATE,
+
+    //homeSDP
+	CTRL_ACTION_STANZA_UPDATE,
+
     CTRL_ACTION_ACCESS_REFRESH,
     CTRL_ACTION_ACCESS_UPDATE,
     CTRL_ACTION_ACCESS_REMOVE,
@@ -48,6 +52,23 @@ struct sdp_creds{
 
 typedef struct sdp_creds *sdp_creds_t;
 
+
+//homeSDP
+struct sdp_stanzas{
+	char *stanza_name;
+	int	 *sdp_id;
+	char *allow_ip;
+	int  *service_ids;
+	char *spa_server;
+	char *key_base64;
+	char *hmac_key_base64;
+	char *use_hmac;
+	char *sdp_ctrl_client_conf;
+};
+
+
+typedef struct sdp_stanzas *sdp_stanzas_t;
+
 // JSON message strings
 extern const char *sdp_key_action;
 extern const char *sdp_key_stage;
@@ -71,6 +92,11 @@ extern const char *sdp_action_service_ack;
 extern const char *sdp_action_bad_message;
 extern const char *sdp_action_connection_update;
 
+//add
+extern const char *sdp_action_stanza_update_request;
+extern const char *sdp_action_stanza_update;
+extern const char *sdp_action_stanza_ack;
+
 extern const char *sdp_stage_error;
 extern const char *sdp_stage_fulfilling;
 extern const char *sdp_stage_requesting;
@@ -89,5 +115,10 @@ int  sdp_message_process(const char *msg, ctrl_action_t *r_action, void **r_data
 int  sdp_message_parse_cred_fields(json_object *jdata, void **r_creds);
 void sdp_message_destroy_creds(sdp_creds_t creds);
 
+
+/*add*/
+int sdp_message_parse_stanza_fields(json_object *jdata, void **r_stanzas);
+int sdp_write_stanza_to_fwknoprc(sdp_stanzas_t stanzas);
+void sdp_message_destroy_stanzas(sdp_stanzas_t stanzas);
 
 #endif /* SDP_MESSAGE_H_ */
